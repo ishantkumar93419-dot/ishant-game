@@ -1,0 +1,382 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ishant's Star Catcher</title>
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    background: #080d27;
+    color: white;
+    font-family: Arial, sans-serif;
+    text-align: center;
+    padding: 20px 10px;
+}
+
+h1 {
+    color: #ffe66d;
+    margin-bottom: 8px;
+}
+
+p {
+    color: #cbd5ff;
+}
+
+.game {
+    max-width: 600px;
+    margin: 20px auto;
+}
+
+.stats {
+    display: flex;
+    justify-content: space-around;
+    gap: 10px;
+    margin: 15px 0;
+    font-size: 18px;
+    font-weight: bold;
+}
+
+canvas {
+    display: block;
+    width: 100%;
+    background: #101b43;
+    border: 3px solid #526dff;
+    border-radius: 12px;
+    touch-action: none;
+}
+
+button {
+    background: #ffe66d;
+    color: #10152f;
+    border: none;
+    border-radius: 10px;
+    padding: 12px 20px;
+    margin: 8px 4px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #ffbd59;
+}
+
+#message {
+    min-height: 24px;
+    color: #ffe66d;
+    font-weight: bold;
+}
+
+.controls {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+}
+
+.controls button {
+    min-width: 90px;
+}
+
+</style>
+</head>
+
+<body>
+
+<h1>⭐ Ishant's Star Catcher ⭐</h1>
+<p>Catch the stars. Don't let them fall!</p>
+
+<div class="game">
+
+    <div class="stats">
+        <span>Score: <span id="score">0</span></span>
+        <span>Lives: <span id="lives">❤️❤️❤️</span></span>
+    </div>
+
+    <canvas id="gameCanvas" width="600" height="450"></canvas>
+
+    <p id="message">Press Start Game to play!</p>
+
+    <button id="startButton">Start Game</button>
+
+    <div class="controls">
+        <button id="leftButton">⬅ Left</button>
+        <button id="rightButton">Right ➡</button>
+    </div>
+
+    <p>Keyboard: use the LEFT and RIGHT arrow keys.</p>
+
+</div>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+const scoreText = document.getElementById("score");
+const livesText = document.getElementById("lives");
+const message = document.getElementById("message");
+const startButton = document.getElementById("startButton");
+
+const W = canvas.width;
+const H = canvas.height;
+
+let basket;
+let stars;
+let score;
+let lives;
+let running = false;
+let gameOver = false;
+let keys = {};
+let lastTime = 0;
+let spawnTimer = 0;
+let animationId = null;
+
+const backgroundStars = Array.from(
+    { length: 65 },
+    () => ({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        size: Math.random() * 2 + 1
+    })
+);
+
+function resetGame() {
+    basket = {
+        x: W / 2 - 45,
+        y: H - 55,
+        width: 90,
+        height: 25,
+        speed: 360
+    };
+
+    stars = [];
+    score = 0;
+    lives = 3;
+    spawnTimer = 0;
+    lastTime = 0;
+    running = true;
+    gameOver = false;
+
+    scoreText.textContent = score;
+    livesText.textContent = "❤️❤️❤️";
+    message.textContent = "Catch as many stars as you can!";
+    startButton.textContent = "Restart Game";
+
+    if (animationId !== null) {
+        cancelAnimationFrame(animationId);
+    }
+
+    animationId = requestAnimationFrame(gameLoop);
+}
+
+function drawBackground() {
+    ctx.fillStyle = "#101b43";
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.fillStyle = "#ffffff";
+
+    for (const star of backgroundStars) {
+        ctx.globalAlpha = 0.4 + Math.random() * 0.6;
+        ctx.beginPath();
+        ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    ctx.globalAlpha = 1;
+}
+
+function drawBasket() {
+    ctx.font = "64px Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(
+        "🧺",
+        basket.x + basket.width / 2,
+        basket.y + basket.height / 2
+    );
+}
+
+function drawStars() {
+    ctx.font = "30px Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    for (const star of stars) {
+        ctx.fillText("⭐", star.x, star.y);
+    }
+}
+
+function spawnStar() {
+    stars.push({
+        x: 25 + Math.random() * (W - 50),
+        y: -20,
+        speed: 130 + Math.random() * 100 + score * 2,
+        size: 22
+    });
+}
+
+function update(deltaTime) {
+    if (keys.ArrowLeft || keys.a) {
+        basket.x -= basket.speed * deltaTime;
+    }
+
+    if (keys.ArrowRight || keys.d) {
+        basket.x += basket.speed * deltaTime;
+    }
+
+    basket.x = Math.max(
+        0,
+        Math.min(W - basket.width, basket.x)
+    );
+
+    spawnTimer += deltaTime;
+
+    const spawnInterval = Math.max(0.35, 0.9 - score * 0.01);
+
+    if (spawnTimer >= spawnInterval) {
+        spawnStar();
+        spawnTimer = 0;
+    }
+
+    for (let i = stars.length - 1; i >= 0; i--) {
+        const star = stars[i];
+        star.y += star.speed * deltaTime;
+
+        const caught =
+            star.y + 12 >= basket.y &&
+            star.y - 12 <= basket.y + basket.height &&
+            star.x >= basket.x &&
+            star.x <= basket.x + basket.width;
+
+        if (caught) {
+            stars.splice(i, 1);
+            score++;
+            scoreText.textContent = score;
+            continue;
+        }
+
+        if (star.y > H + 20) {
+            stars.splice(i, 1);
+            lives--;
+
+            livesText.textContent =
+                "❤️".repeat(lives) + "🖤".repeat(3 - lives);
+
+            if (lives <= 0) {
+                endGame();
+                return;
+            }
+        }
+    }
+}
+
+function draw() {
+    drawBackground();
+    drawStars();
+    drawBasket();
+}
+
+function gameLoop(timestamp) {
+    if (!running) return;
+
+    if (lastTime === 0) {
+        lastTime = timestamp;
+    }
+
+    const deltaTime = Math.min(
+        (timestamp - lastTime) / 1000,
+        0.04
+    );
+
+    lastTime = timestamp;
+
+    update(deltaTime);
+    draw();
+
+    if (running) {
+        animationId = requestAnimationFrame(gameLoop);
+    }
+}
+
+function endGame() {
+    running = false;
+    gameOver = true;
+    message.textContent = "Game Over! Your score: " + score;
+    startButton.textContent = "Play Again";
+
+    draw();
+
+    ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.fillStyle = "#ffe66d";
+    ctx.textAlign = "center";
+    ctx.font = "bold 42px Arial";
+    ctx.fillText("GAME OVER", W / 2, H / 2 - 20);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "24px Arial";
+    ctx.fillText("Score: " + score, W / 2, H / 2 + 25);
+}
+
+document.addEventListener("keydown", function(event) {
+    if (
+        ["ArrowLeft", "ArrowRight", " "].includes(event.key)
+    ) {
+        event.preventDefault();
+    }
+
+    keys[event.key] = true;
+});
+
+document.addEventListener("keyup", function(event) {
+    keys[event.key] = false;
+});
+
+window.addEventListener("blur", function() {
+    keys = {};
+});
+
+function moveBasket(direction) {
+    if (!running) return;
+
+    basket.x += direction * 45;
+    basket.x = Math.max(
+        0,
+        Math.min(W - basket.width, basket.x)
+    );
+}
+
+document.getElementById("leftButton").addEventListener(
+    "click",
+    () => moveBasket(-1)
+);
+
+document.getElementById("rightButton").addEventListener(
+    "click",
+    () => moveBasket(1)
+);
+
+startButton.addEventListener("click", resetGame);
+
+drawBackground();
+
+ctx.fillStyle = "#ffe66d";
+ctx.textAlign = "center";
+ctx.font = "bold 30px Arial";
+ctx.fillText("Ready to catch stars?", W / 2, H / 2 - 15);
+
+ctx.fillStyle = "#ffffff";
+ctx.font = "20px Arial";
+ctx.fillText("Press Start Game!", W / 2, H / 2 + 25);
+</script>
+
+</body>
+</html>
